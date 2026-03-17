@@ -62,6 +62,46 @@ uprock daemon logs --grep error # Filter lines by substring
 uprock daemon logs --path       # Print log file path
 ```
 
+### AI Tools
+
+AI-powered tools that run through the UpRock network. Requires an API key — either log in
+with `uprock auth login` or set the `UPROCK_API_KEY` environment variable directly.
+
+```bash
+uprock ai crawl <url>       # Fetch a URL via the crawl network
+uprock ai research <query>  # Search the web across multiple engines and regions
+uprock ai sweep <url>       # Test site performance across geographic regions
+uprock ai fetch <uri>       # Fetch content from a crawl:// or sweep:// resource URI
+```
+
+`ai crawl` supports geographic targeting, HTTP methods, and JavaScript rendering:
+
+```bash
+uprock ai crawl example.com                         # Full-page crawl (default)
+uprock ai crawl example.com -m GET                  # Plain HTTP GET (faster, no JS)
+uprock ai crawl example.com --country EU            # Crawl from Europe
+uprock ai crawl example.com -d desktop              # Desktop device
+uprock ai crawl example.com --content               # Inline markdown in response
+```
+
+`ai research` searches across multiple engines with deduplication:
+
+```bash
+uprock ai research best cloud providers             # Multi-engine search
+uprock ai research best restaurants --countries EU  # Search from Europe's perspective
+uprock ai research climate data -n 30               # Up to 30 results
+```
+
+`ai sweep` tests performance from multiple regions simultaneously:
+
+```bash
+uprock ai sweep example.com                         # Default: NA, EU, APAC
+uprock ai sweep example.com -r NA,EU                # Specific regions
+uprock ai sweep example.com --tries 3 -d desktop    # 3 checks/region, desktop
+```
+
+All AI commands output JSON. Pipe to `jq` for filtering. See [SKILL.md](./SKILL.md) for detailed flag reference and usage guidance for LLM agents.
+
 ### Other
 
 ```bash

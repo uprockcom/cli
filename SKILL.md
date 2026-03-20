@@ -26,10 +26,72 @@ Authenticate with UpRock. Prompts for an email address (or accepts `--email`), s
 one-time code to that address, then prompts for the code on stdin. The session is stored
 locally after confirmation.
 
+**Requires an interactive terminal.** If stdin is not a TTY (automation, bots, CI), the code
+prompt will receive EOF and the login will abort with a hint to use `auth request` +
+`auth confirm` instead. See below.
+
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--email` | — | Pre-fill the email address in the login flow. |
 | `--setup-ai` | false | Obtain an UpRock AI API key after login. Use this when you plan to call AI tool commands. |
+
+### `uprock auth request`
+
+**Non-interactive login, step 1.** Send a login code to the given email address and print
+the session ID to stdout. No stdin interaction — designed for automation and bot-driven flows.
+
+The session ID is printed as a bare string to stdout (one line, no label). Informational
+messages go to stderr. This means `$(uprock auth request --email ...)` captures only the
+session ID.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--email` | — | Email address to send the login code to. **Required.** |
+
+After calling `request`, obtain the verification code from the user through your own
+channel (chat message, webhook, etc.), then pass it to `auth confirm`.
+
+Example:
+```bash
+SESSION=$(uprock auth request --email user@example.com 2>/dev/null)
+# → SESSION now holds the session ID
+```
+
+### `uprock auth confirm`
+
+**Non-interactive login, step 2.** Confirm a login session using the session ID from
+`auth request` and the verification code the user received by email. No stdin interaction.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--session` | — | Session ID returned by `auth request`. **Required.** |
+| `--code` | — | Verification code from the email. **Required.** |
+| `--setup-ai` | false | Obtain an UpRock AI API key after login. Use this when you plan to call AI tool commands. |
+
+On success, prints `"Logged in."` to stdout and returns exit code 0.
+
+Example:
+```bash
+uprock auth confirm --session "$SESSION" --code 0018148
+```
+
+#### Non-interactive login decision rule
+
+- **You have an interactive terminal** → use `uprock auth login`. Simpler, single command.
+- **You are a bot, script, or CI pipeline** → use `auth request` + `auth confirm`. Two
+  commands, no stdin required. The session ID bridges the two steps.
+
+Full bot workflow:
+```bash
+# 1. Request code (captures session ID)
+SESSION=$(uprock auth request --email user@example.com 2>/dev/null)
+
+# 2. Obtain the code from the user via your own channel
+#    (chat prompt, webhook callback, etc.)
+
+# 3. Confirm login
+uprock auth confirm --session "$SESSION" --code "$CODE"
+```
 
 ### `uprock auth logout`
 

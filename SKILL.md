@@ -1,6 +1,6 @@
 ---
 name: uprock
-description: How to use the UpRock CLI for authentication, daemon management, and AI tools (web crawling, multi-engine search, performance sweeps). Use this skill whenever the user asks to crawl a URL, research the web, test site performance, manage the UpRock daemon, or authenticate with UpRock.
+description: How to use the UpRock CLI for authentication, daemon management, and AI tools (web crawling, multi-engine search, performance sweeps, Video Semantic Search). Use this skill whenever the user asks to crawl a URL, research the web, search inside video or find a moment in a video (VSS), test site performance, manage the UpRock daemon, or authenticate with UpRock. Also use it for agent-driven research workflows such as crypto and digital asset research, daily news and social sentiment monitoring for prediction markets, token due diligence, and comparing regional market narratives.
 ---
 
 # UpRock CLI
@@ -404,6 +404,116 @@ uprock ai fetch "sweep://def456/NA/0/screenshot" > screenshot.png
 uprock ai fetch "crawl://abc123/markdown" | head -100
 ```
 
+### `uprock ai video-search <query...>`
+
+Search inside video by meaning and get back the exact matching moments — UpRock **Video
+Semantic Search (VSS)**.
+
+Use this to find where something is said or shown across indexed video — "the part where
+he opens the box", "a red car drifting in the rain". Each video is split into overlapping
+~30 second moments; every moment is transcribed and fused into a single vector covering
+both its frames and its speech. A query embeds into that same space, then a reranker
+re-reads each candidate's keyframes and transcript together with the query. Matches
+therefore come from what actually happens on screen and in the audio, NOT from titles,
+descriptions, or tags. Results are returned best-first. A video that was never indexed
+cannot appear — no result means "not in the index", not "not in the video".
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--max-results` | `-n` | 10 | Maximum moments to return, clamped to 1–100. Applied AFTER reranking, which always re-reads the same fixed candidate set — raising this cuts deeper into those candidates rather than widening the search, so it does not surface fundamentally new matches. |
+| `--tags` | — | — | Scope the search to a tagged corpus, as `key=value` (repeatable, or comma-separated). Tag values are **CASE-SENSITIVE** — `PostHog` and `posthog` are different corpora (keys are lowercased for you, values are not). Tags only match videos in YOUR OWN index, so a tagged search excludes the public catalog. Omit to search everything visible to your key. |
+| `--unique` | — | false | Return ONE moment per video — each video's best-scoring moment — with `occurrence_count` set. Useful because hits are per-segment: on a small corpus a single video can otherwise fill the whole page. |
+| `--image` | — | — | Path to a PNG or JPEG to search by visual similarity. Combine with a text query to match both, or use alone. An image-only query keeps first-stage vector order and skips reranking, so scores are cosine similarity rather than reranker scores. |
+| `--after` | — | — | Only moments from videos published on or after this date. Videos with an unknown publication date NEVER match a bounded range — they are excluded, not treated as old. |
+| `--before` | — | — | Only moments from videos published on or before this date. Either bound may be used alone. |
+| `--recent` | — | false | Re-sort the matched results newest-first by publication date, with relevance as the tiebreak. This re-orders matches only — it is NOT a chronological feed of everything published. |
+| `--timeout` | `-t` | 120 | Timeout in seconds. |
+
+QUERY PHRASING: describe the moment as you would *see* it, not as a video would be
+*titled*. Metadata-style keyword queries match moments that happen to mention those words,
+which is rarely what you want. PREFER one specific description over broad keywords — the
+reranker is where the quality comes from, and it only ever sees candidates the first-stage
+retrieval already found.
+
+```
+RIGHT: uprock ai video-search "he pulls the phone out of the box"
+  → finds the moment that action happens, in any video
+
+WRONG: uprock ai video-search "iPhone unboxing 2026"
+  → title-style keywords; matches moments that merely say those words
+
+RIGHT: uprock ai video-search "a red car drifting in the rain"
+  → matches what is visible on screen, not just what is spoken
+```
+
+Decision rule:
+- **"Where is this discussed?"** → default per-moment search. Returns every strong moment,
+  and one video may appear several times.
+- **"Which videos cover this?"** → `--unique`. One entry per video, with `occurrence_count`
+  showing how many of that video's moments matched.
+- **"What is new on this topic?"** → `--after` to bound the range, plus `--recent` to order
+  by publication date.
+
+Response structure:
+
+```json
+{
+  "results": [
+    {
+      "id": "9f2c1e34-…",
+      "video_id": "3a7e88b2-…",
+      "t0": 812.0,
+      "t1": 840.0,
+      "score": 0.87,
+      "title": "Static fire anomaly",
+      "transcript": "…extract of what is said during the moment…",
+      "occurrence_count": 0,
+      "origin_url": "https://www.youtube.com/watch?v=…",
+      "source": "youtube",
+      "published_at": 1767225600
+    }
+  ]
+}
+```
+
+`t0` and `t1` are the moment's start and end in SECONDS. Combine `origin_url` with `t0` to
+deep-link straight to the moment. `source` is the platform the video came from: youtube,
+tiktok, x, instagram, facebook, or upload. `transcript` is a truncated extract, present
+when the moment contains speech. `published_at` is the video's publication time in unix
+seconds, or 0 when unknown. `occurrence_count` is meaningful only with `--unique`, where
+it is a lower bound on that video's matching moments; it is 0 otherwise.
+
+Each hit is a matched SEGMENT, so one video can legitimately return several results —
+use `--unique` when you want distinct videos instead.
+
+Scope comes from your API key (your own indexed videos plus the public catalog), narrowed
+further by `--tags` when given. An empty result set can also mean a recently-ingested video
+is still being processed — a video becomes searchable as its moments are written near the
+end of ingest, so one that is still running may return nothing yet, or only part of itself.
+Retry before concluding a video is absent.
+
+Examples:
+
+```bash
+# Find the moment an action happens
+uprock ai video-search "the part where he opens the box"
+
+# Which videos cover this topic at all
+uprock ai video-search "rocket engine test failure" --unique -n 5
+
+# Scope to one tagged corpus (tag values are case-sensitive)
+uprock ai video-search "pricing objection" --tags cust-demo=PostHog
+
+# Search by what a frame looks like
+uprock ai video-search --image ./red-car.jpg
+
+# Newest coverage first, this year only
+uprock ai video-search "quarterly earnings" --after 2026-01-01 --recent
+
+# Deep-link the best moment
+uprock ai video-search "keynote demo" | jq -r '.results[0] | "\(.origin_url)&t=\(.t0|floor)"'
+```
+
 ## Version
 
 ```bash
@@ -451,12 +561,74 @@ uprock ai research "best static site generators 2026" -n 5 | jq -r '.results[].u
 uprock ai crawl <url> --content
 ```
 
+**Find a moment in video and share a deep link:**
+
+```bash
+uprock ai video-search "the part where he opens the box" \
+  | jq -r '.results[0] | "\(.origin_url)&t=\(.t0|floor)"'
+# Share the printed URL — it opens the video at that moment
+```
+
 **Sweep a site after deployment and share the report:**
 
 ```bash
 uprock ai sweep mysite.com | jq -r '.report_url'
 # Share the printed URL with your team
 ```
+
+**Daily news and sentiment scan for a prediction market position:**
+
+Agents resolving or trading prediction markets need fresh signal, not stale index pages.
+Research surfaces today's coverage across engines and regions, then crawl pulls the full
+text for sentiment analysis.
+
+```bash
+# Surface today's news and social chatter around a market question
+uprock ai research "US election betting odds news today" -n 15 | jq -r '.results[].url'
+
+# Crawl the top sources and inline the content for analysis
+uprock ai crawl <url> --content | jq -r '.inlined_markdown'
+
+# Social sentiment: crawl discussion pages with full JS rendering
+# (CRAWL_FULL_PAGE handles dynamic feeds that plain GET misses)
+uprock ai crawl "https://www.reddit.com/search/?q=polymarket%20election&sort=new" --content
+```
+
+Schedule this as a recurring agent task: research → crawl top N → summarize sentiment →
+compare against current market odds.
+
+**Digital asset due diligence:**
+
+Before an agent takes a position or recommends a token, gather primary sources: docs,
+audits, news, and community discussion.
+
+```bash
+# Project fundamentals and recent coverage
+uprock ai research "<token name> tokenomics audit news" -n 10
+
+# Crawl the project's docs and read the full text
+uprock ai crawl docs.<project>.xyz --content | jq -r '.inlined_markdown'
+
+# Pull recent community discussion for sentiment
+uprock ai research "<token name> reddit discussion" -n 5 | jq -r '.results[].url'
+```
+
+**Compare regional narratives for a digital asset:**
+
+Crypto sentiment differs sharply by region. Use `--countries` to see what local traders
+see — one call per region, then compare.
+
+```bash
+# What NA sees vs what APAC sees for the same query
+uprock ai research "bitcoin ETF outlook" --countries NA -n 10 > na.json
+uprock ai research "bitcoin ETF outlook" --countries APAC -n 10 > apac.json
+
+# Diff the sources each region surfaces
+jq -r '.results[].url' na.json apac.json | sort | uniq -c | sort -rn
+```
+
+This is the correct pattern for regional comparison — separate calls per region, never
+combined regions in one call.
 
 **Check daemon health:**
 

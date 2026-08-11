@@ -1,6 +1,6 @@
 ---
 name: uprock
-description: How to use the UpRock CLI for authentication, daemon management, and AI tools (web crawling, multi-engine search, performance sweeps, Video Semantic Search). Use this skill whenever the user asks to crawl a URL, research the web, search inside video or find a moment in a video (VSS), test site performance, manage the UpRock daemon, or authenticate with UpRock.
+description: How to use the UpRock CLI for authentication, daemon management, and AI tools (web crawling, multi-engine search, performance sweeps, Video Semantic Search). Use this skill whenever the user asks to crawl a URL, research the web, search inside video or find a moment in a video (VSS), test site performance, manage the UpRock daemon, or authenticate with UpRock. Also use it for agent-driven research workflows such as crypto and digital asset research, daily news and social sentiment monitoring for prediction markets, token due diligence, and comparing regional market narratives.
 ---
 
 # UpRock CLI
@@ -574,6 +574,60 @@ uprock ai video-search "the part where he opens the box" \
 uprock ai sweep mysite.com | jq -r '.report_url'
 # Share the printed URL with your team
 ```
+
+**Daily news and sentiment scan for a prediction market position:**
+
+Agents resolving or trading prediction markets need fresh signal, not stale index pages.
+Research surfaces today's coverage across engines and regions, then crawl pulls the full
+text for sentiment analysis.
+
+```bash
+# Surface today's news and social chatter around a market question
+uprock ai research "US election betting odds news today" -n 15 | jq -r '.results[].url'
+
+# Crawl the top sources and inline the content for analysis
+uprock ai crawl <url> --content | jq -r '.inlined_markdown'
+
+# Social sentiment: crawl discussion pages with full JS rendering
+# (CRAWL_FULL_PAGE handles dynamic feeds that plain GET misses)
+uprock ai crawl "https://www.reddit.com/search/?q=polymarket%20election&sort=new" --content
+```
+
+Schedule this as a recurring agent task: research → crawl top N → summarize sentiment →
+compare against current market odds.
+
+**Digital asset due diligence:**
+
+Before an agent takes a position or recommends a token, gather primary sources: docs,
+audits, news, and community discussion.
+
+```bash
+# Project fundamentals and recent coverage
+uprock ai research "<token name> tokenomics audit news" -n 10
+
+# Crawl the project's docs and read the full text
+uprock ai crawl docs.<project>.xyz --content | jq -r '.inlined_markdown'
+
+# Pull recent community discussion for sentiment
+uprock ai research "<token name> reddit discussion" -n 5 | jq -r '.results[].url'
+```
+
+**Compare regional narratives for a digital asset:**
+
+Crypto sentiment differs sharply by region. Use `--countries` to see what local traders
+see — one call per region, then compare.
+
+```bash
+# What NA sees vs what APAC sees for the same query
+uprock ai research "bitcoin ETF outlook" --countries NA -n 10 > na.json
+uprock ai research "bitcoin ETF outlook" --countries APAC -n 10 > apac.json
+
+# Diff the sources each region surfaces
+jq -r '.results[].url' na.json apac.json | sort | uniq -c | sort -rn
+```
+
+This is the correct pattern for regional comparison — separate calls per region, never
+combined regions in one call.
 
 **Check daemon health:**
 

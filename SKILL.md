@@ -420,7 +420,7 @@ cannot appear — no result means "not in the index", not "not in the video".
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--max-results` | `-n` | 10 | Maximum moments to return. The service caps a response at roughly 10 segments regardless of what you ask for, so treat this as a lower bound, not a way to page. It is also applied AFTER reranking, so raising it will not surface fundamentally new matches. |
+| `--max-results` | `-n` | 10 | Maximum moments to return. The service caps a response at roughly 10 segments regardless of what you ask for, so values above that do not page further into the corpus. The cap applies AFTER reranking, so raising it does not surface fundamentally new matches. |
 | `--tags` | — | — | Scope the search to a tagged corpus, as `key=value` (repeatable). Tag values are **CASE-SENSITIVE** — `PostHog` and `posthog` are different corpora. Omit to search everything visible to your key. |
 | `--unique` | — | false | Return ONE moment per video — each video's best-scoring moment — with `occurrence_count` set. Useful because hits are per-segment: on a small corpus a single video can otherwise fill the whole page. |
 | `--image` | — | — | Path to a PNG or JPEG to search by visual similarity. Combine with a text query to match both, or use alone. An image-only query keeps first-stage vector order and skips reranking, so scores are cosine similarity rather than reranker scores. |

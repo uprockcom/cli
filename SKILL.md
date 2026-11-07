@@ -1,6 +1,6 @@
 ---
 name: uprock
-description: How to use the UpRock CLI for authentication, daemon management, and AI tools (web crawling, multi-engine search, performance sweeps). Use this skill whenever the user asks to crawl a URL, research the web, test site performance, manage the UpRock daemon, or authenticate with UpRock.
+description: How to use the UpRock CLI for authentication, daemon management, and AI tools (web crawling, multi-engine search, multi-region verification via uprock ai verify, resource fetching, and buying AI credits via uprock ai buy). Use this skill whenever the user asks to crawl a URL, research the web, verify site availability/performance across regions, top up AI credits, manage the UpRock daemon, or authenticate with UpRock.
 ---
 
 # UpRock CLI
@@ -181,8 +181,18 @@ AI-powered tools that execute through the UpRock distributed network. Every AI c
 requires an API key. Set `UPROCK_API_KEY` to use a key directly, or run
 `uprock auth login` — the key is resolved automatically on first use.
 
-All AI commands write JSON to stdout and progress indicators to stderr, so piped output
+All AI tool commands (`crawl`, `research`, `verify`) write JSON to stdout and progress indicators to stderr, so piped output
 is always clean JSON. Use `jq` to extract fields.
+
+### Quick Decision Matrix
+
+| Task | Command |
+|------|---------|
+| Fetch a single web page (with JS rendering & anti-bot bypass) | `uprock ai crawl <url> --content` |
+| Search the web across multiple engines & regions | `uprock ai research "<query>"` |
+| Verify site availability & Core Web Vitals across regions | `uprock ai verify <url>` (`sweep` is a deprecated alias) |
+| Retrieve a `crawl://` or `sweep://` resource URI | `uprock ai fetch "<uri>"` |
+| Top up AI credits via Stripe Checkout (`$5`–`$1000` USD) | `uprock ai buy <amount>` |
 
 ### `uprock ai crawl <url>`
 
@@ -321,9 +331,9 @@ Response structure:
 
 Results are unordered. Title and description are included when available.
 
-### `uprock ai sweep <url>`
+### 4. Multi-Region Verification (`uprock ai verify <url>`)
 
-Test website reliability and performance across geographic regions.
+Verify website reliability, availability, and performance across geographic regions (`uprock ai sweep <url>` remains available as a deprecated alias).
 
 Use this after deploying a website or service to verify it is up, responsive, and
 performing well from different parts of the world. Loads the target URL from multiple
@@ -346,34 +356,34 @@ ignored if you only need the metrics.
 The response includes a `report_url` field with a link to a human-readable report page
 that can be shared for visual review.
 
-A sweep may complete with some failed checks. Inspect the `failed_jobs` count and
-per-job `error` fields to identify issues.
+A verification run may complete with some failed checks. Inspect the `failed_jobs` count and
+per-job `error` fields to identify issues, while completed regions still return their metrics.
 
 Examples:
 
 ```bash
-# Default sweep: NA, EU, APAC — 5 checks each, mobile
-uprock ai sweep example.com
+# Default verification: NA, EU, APAC — 5 checks each, mobile
+uprock ai verify example.com
 
 # Specific regions, desktop
-uprock ai sweep example.com -r NA,EU -d desktop
+uprock ai verify example.com -r NA,EU -d desktop
 
 # Quick check: 2 tries, short timeout
-uprock ai sweep example.com --tries 2 -t 30
+uprock ai verify example.com --tries 2 -t 30
 
 # All five regions
-uprock ai sweep example.com -r NA,EU,APAC,LATAM,MEA
+uprock ai verify example.com -r NA,EU,APAC,LATAM,MEA
 
 # Extract the shareable report URL
-uprock ai sweep example.com | jq -r '.report_url'
+uprock ai verify example.com | jq -r '.report_url'
 ```
 
-### `uprock ai fetch <uri>`
+### 5. Resource Fetch (`uprock ai fetch <uri>`)
 
 Fetch the full content of a `crawl://` or `sweep://` resource URI from a prior tool
 response.
 
-Use this when you need to read actual content that a previous `crawl` or `sweep` command
+Use this when you need to read actual content that a previous `crawl` or `verify` (`sweep`) command
 returned as a resource URI. For crawl results, the response includes a summary for quick
 analysis plus resource URIs pointing to full content in markdown and HTML formats. When
 the summary is sufficient, you do not need this command. When you need the complete page
@@ -383,7 +393,7 @@ here.
 For crawl results, use the markdown resource URI unless you specifically need raw HTML
 structure. Markdown is significantly more compact and easier to work with.
 
-For sweep results, pass a `sweep://` screenshot URI to retrieve the screenshot image.
+For verification results, pass a `sweep://` screenshot URI to retrieve the screenshot image.
 
 Output is written directly to stdout: text for markdown/HTML resources, binary for images.
 Pipe or redirect as needed.
@@ -397,11 +407,43 @@ uprock ai fetch "crawl://abc123/markdown"
 # Get raw HTML when you need DOM structure
 uprock ai fetch "crawl://abc123/html"
 
-# Save a sweep screenshot to a file
+# Save a verification screenshot to a file
 uprock ai fetch "sweep://def456/NA/0/screenshot" > screenshot.png
 
 # Pipe markdown through a processor
 uprock ai fetch "crawl://abc123/markdown" | head -100
+```
+
+### 6. Buy AI Credits (`uprock ai buy <amount>`)
+
+Create a Stripe Checkout session to top up your organization's UpRock AI credits, print the checkout link, and wait/poll until payment completes.
+
+| Argument / Flag | Short | Default | Description |
+|-----------------|-------|---------|-------------|
+| `<amount>` | — | — | Whole USD amount between `5` and `1000` (e.g. `20`, `100`, or `'$20'`). **Required.** |
+| `--timeout` | `-t` | 300 | Timeout in seconds while waiting for payment completion. |
+
+#### Billing & Credit Management for Agents
+
+When an AI command or API call fails due to exhausted credits (`402 Payment Required` / `BILLING_TOPUP_REQUIRED` or `429` daily cap reached) or when the user asks to top up credits:
+1. Run `uprock ai buy <amount>` (for example, `uprock ai buy 20`). This endpoint is permitted even when the API key is currently blocked for `402 Payment Required`.
+2. The CLI immediately prints the Stripe Checkout URL to stdout:
+   ```
+   Complete your $20 USD top-up (40000 credits) at:
+   https://checkout.stripe.com/c/pay/cs_...
+   ```
+   and writes `Waiting for payment completion...` to stderr.
+3. **Surface the Stripe Checkout URL directly to the user** so they can open it and complete payment in their browser.
+4. Keep the command running (up to `-t/--timeout`, default `300`s): `uprock ai buy` polls `GET /v1/api-keys/self` every 3 seconds until the credit balance increases (or the `402` block clears with positive credits), prints `Payment complete. Credits remaining: <credits>`, and exits with code `0`.
+
+Examples:
+
+```bash
+# Buy $20 USD in AI credits and wait for payment completion
+uprock ai buy 20
+
+# Buy $100 USD with a 10-minute timeout
+uprock ai buy 100 -t 600
 ```
 
 ## Version
@@ -451,11 +493,18 @@ uprock ai research "best static site generators 2026" -n 5 | jq -r '.results[].u
 uprock ai crawl <url> --content
 ```
 
-**Sweep a site after deployment and share the report:**
+**Verify a site after deployment and share the report:**
 
 ```bash
-uprock ai sweep mysite.com | jq -r '.report_url'
+uprock ai verify mysite.com | jq -r '.report_url'
 # Share the printed URL with your team
+```
+
+**Top up AI credits when balance is low or 402 is returned:**
+
+```bash
+uprock ai buy 20
+# Share the printed Stripe Checkout URL with the user; CLI waits until payment completes
 ```
 
 **Check daemon health:**

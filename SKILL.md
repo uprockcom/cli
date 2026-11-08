@@ -1,6 +1,6 @@
 ---
 name: uprock
-description: How to use the UpRock CLI for authentication, daemon management, and AI tools (web crawling, multi-engine search, multi-region verification via uprock ai verify, resource fetching, and buying AI credits via uprock ai buy). Use this skill whenever the user asks to crawl a URL, research the web, verify site availability/performance across regions, top up AI credits, manage the UpRock daemon, or authenticate with UpRock.
+description: How to use the UpRock CLI for authentication, API key management (uprock keys list/use/create/revoke), daemon management, and AI tools (web crawling, multi-engine search, multi-region verification via uprock ai verify, resource fetching, and buying AI credits via uprock ai buy). Use this skill whenever the user asks to crawl a URL, research the web, verify site availability/performance across regions, top up AI credits, manage API keys, manage the UpRock daemon, or authenticate with UpRock.
 ---
 
 # UpRock CLI
@@ -102,8 +102,53 @@ Clear the local session. After logout:
 
 ### `uprock auth status`
 
-Print whether a valid session exists, the associated email address, and whether an AI API
-key is set. Returns exit code 1 when not authenticated.
+Print whether a valid session exists, the associated email address, and details about the
+active AI API key:
+- Key name and first characters/prefix (never the full key)
+- Key source (`UPROCK_API_KEY` environment variable or `saved login`)
+- Organization ID
+- Credits remaining (`credits_remaining`)
+
+Returns exit code 1 when neither logged in nor configured with `UPROCK_API_KEY`.
+
+When `--setup-ai` is passed to `uprock auth login` or `uprock auth confirm`, the CLI also
+prints the configured key's name, prefix, and whether it was newly created (`[new key]`)
+or reused (`[existing key]`).
+
+## API Keys (`uprock keys`)
+
+Manage your organization's UpRock AI API keys. Requires an active login session
+(`uprock auth login`). Full API keys are never printed by `list`, `use`, or `revoke`.
+
+### `uprock keys list`
+
+List all active API keys in the organization, showing:
+- `*` marker on the key the CLI uses by default
+- `NAME`
+- `PREFIX` (first characters of the key)
+- `CREATED` date (`YYYY-MM-DD`)
+- `LAST USED` date (`YYYY-MM-DD` or `never`)
+
+### `uprock keys use <name or prefix>`
+
+Set which API key the CLI uses by default (persisted to the local credential store and
+updated on the running daemon if active). Matches by exact name or prefix first, then
+case-insensitive name or prefix prefix-match. Note: the `UPROCK_API_KEY` environment
+variable still takes precedence when set.
+
+### `uprock keys create <name>`
+
+Create a new API key in the organization with standard MCP permissions, print the full
+key once, and offer to make it the default CLI key.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--use` | false | Make the newly created key the default CLI key without prompting. |
+
+### `uprock keys revoke <name or prefix>`
+
+Revoke an API key by name or prefix. If the revoked key was the saved default CLI key,
+the saved default key is cleared automatically.
 
 ## Daemon
 

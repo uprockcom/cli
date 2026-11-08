@@ -35,10 +35,25 @@ uprock auth login       # Log in with your UpRock account (interactive)
 uprock auth request     # Request a login code (non-interactive)
 uprock auth confirm     # Confirm a login code (non-interactive)
 uprock auth logout      # Log out
-uprock auth status      # Check authentication state
+uprock auth status      # Show login state, active API key (name & prefix), org, credits left, and key source
 ```
 
 You must be logged in to earn. The daemon can run without authentication, but it will not earn until you log in.
+
+When `--setup-ai` is passed to `uprock auth login` or `uprock auth confirm`, the CLI also prints which API key was configured (`name`, `prefix`, and whether it is a `[new key]` or `[existing key]`).
+
+### API Keys
+
+Manage your organization's UpRock AI API keys (requires `uprock auth login`):
+
+```bash
+uprock keys list                     # List keys (name, prefix, created date, last used, and * on the default key)
+uprock keys use <name or prefix>     # Set which key the CLI uses by default
+uprock keys create <name> [--use]    # Create a new key (shows full key once and offers to make it the default)
+uprock keys revoke <name or prefix>  # Revoke a key
+```
+
+The `UPROCK_API_KEY` environment variable always takes precedence when set, overriding the saved default key.
 
 #### Non-Interactive Login
 
